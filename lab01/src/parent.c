@@ -11,29 +11,38 @@ int main() {
     pid_t pid;
 
     if (pipe(pipefd) == -1) {
-        perror("pipe");
+        const char msg[] = "error: failed to open pipe\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
         exit(EXIT_FAILURE);
     }
 
-    char filename[256];
-    printf("Enter filename: ");
-    scanf("%255s", filename);
-
+    char filename[BUF_SIZE];
+    const char msg[] = "Enter filename: ";
+    write(STDOUT_FILENO, msg, sizeof(msg) - 1);
+    int n = read(STDIN_FILENO, filename, sizeof(filename) - 1);
+    
+    if (n > 0 && n < sizeof(filename)) {
+        filename[n - 1] = '\0';
+    } else {
+        filename[sizeof(filename) - 1] = '\0';
+    }
+    
     pid = fork();
     if (pid == -1) {
-        perror("fork");
+        const char msg[] = "error: failed to make fork\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
         exit(EXIT_FAILURE);
     }
 
     if (pid == 0) {
-        
         close(pipefd[0]);
 
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
 
         execlp("./child", "child", filename, (char*)NULL);
-        perror("execlp");
+        const char msg[] = "error: failed to execlp\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
         exit(EXIT_FAILURE);
     } else {
 

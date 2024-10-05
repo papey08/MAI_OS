@@ -8,13 +8,14 @@
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+        const char msg[] = "Usage: ./child <filename>\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
         exit(EXIT_FAILURE);
     }
-
     int filefd = open(argv[1], O_RDONLY);
     if (filefd == -1) {
-        perror("open");
+        const char msg[] = "error: failed to open file\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
         exit(EXIT_FAILURE);
     }
 
