@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <time.h>
 
-void handle_error(const char* msg) {
+void HandleError(const char* msg) {
     perror(msg);
     exit(1);
 }
@@ -20,7 +20,7 @@ int main() {
     int r = 0;
 
     if (pipe(pipe1) == -1 || pipe(pipe2) == -1) {
-        handle_error("Pipe failed");
+        HandleError("Pipe failed");
     }
 
     char *file1 = NULL, *file2 = NULL;
@@ -43,7 +43,7 @@ int main() {
         close(pipe1[0]);
 
         execlp("./child1", "./child1", file1, NULL);
-        handle_error("execve for child1 failed");
+        HandleError("execve for child1 failed");
     }
 
     if ((child2 = fork()) == 0) {
@@ -55,7 +55,7 @@ int main() {
         close(pipe2[0]);
 
         execlp("./child2", "./child2", file2, NULL);
-        handle_error("execve for child2 failed");
+        HandleError("execve for child2 failed");
     }
 
     close(pipe1[0]);
