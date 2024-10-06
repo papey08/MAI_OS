@@ -1,10 +1,18 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-// Функция для удаления гласных из строки
+void HandleError(const char* msg) {
+    write(STDERR_FILENO, msg, strlen(msg));
+    write(STDERR_FILENO, "\n", 1);
+    exit(1);
+}
+
+void Print(const char* msg) {
+    write(STDOUT_FILENO, msg, strlen(msg));
+}
+
 void RemoveVowels(char* str) {
     char* p = str;
     char* q = str;
@@ -19,22 +27,22 @@ void RemoveVowels(char* str) {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <output_file>\n", argv[0]);
-        exit(1);
+        HandleError("Usage: <program> <output_file>");
     }
 
     int fd = open(argv[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd == -1) {
-        perror("Cannot open file1");
-        exit(1);
+        HandleError("Cannot open file");
     }
 
     char buffer[1024];
-    ssize_t bytes_read;
+    ssize_t bytesRead;
 
-    while ((bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
+    while ((bytesRead = read(STDIN_FILENO, buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[bytesRead] = '\0';
         RemoveVowels(buffer);
-        dprintf(fd, "%s\n", buffer);
+        write(fd, buffer, strlen(buffer));
+        write(fd, "\n", 1);
     }
 
     close(fd);

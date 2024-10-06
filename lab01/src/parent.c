@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -7,8 +6,40 @@
 #include <time.h>
 
 void HandleError(const char* msg) {
-    perror(msg);
+    write(STDERR_FILENO, msg, strlen(msg));
+    write(STDERR_FILENO, "\n", 1);
     exit(1);
+}
+
+ssize_t Getline(char **lineptr, size_t *n, int fd) {
+    if (*lineptr == NULL) {
+        *lineptr = malloc(128);
+        *n = 128;
+    }
+
+    size_t pos = 0;
+    char c;
+    while (read(fd, &c, 1) == 1) {
+        if (pos >= *n - 1) {
+            *n *= 2;
+            *lineptr = realloc(*lineptr, *n);
+        }
+        (*lineptr)[pos++] = c;
+        if (c == '\n') {
+            break;
+        }
+    }
+
+    if (pos == 0) {
+        return -1;
+    }
+
+    (*lineptr)[pos] = '\0';
+    return pos;
+}
+
+void Print(const char* msg) {
+    write(STDOUT_FILENO, msg, strlen(msg));
 }
 
 int main() {
@@ -26,12 +57,12 @@ int main() {
     char *file1 = NULL, *file2 = NULL;
     size_t file_len = 0;
 
-    printf("Введите имя файла для дочернего процесса 1: ");
-    getline(&file1, &file_len, stdin);
+    Print("Введите имя файла для дочернего процесса 1: ");
+    Getline(&file1, &file_len, STDIN_FILENO);
     file1[strcspn(file1, "\n")] = 0;
 
-    printf("Введите имя файла для дочернего процесса 2: ");
-    getline(&file2, &file_len, stdin);
+    Print("Введите имя файла для дочернего процесса 2: ");
+    Getline(&file2, &file_len, STDIN_FILENO);
     file2[strcspn(file2, "\n")] = 0;
 
     if ((child1 = fork()) == 0) {
@@ -49,7 +80,7 @@ int main() {
     if ((child2 = fork()) == 0) {
         close(pipe2[1]);
         close(pipe1[0]);
-        close(pipe1[1]); 
+        close(pipe1[1]);
 
         dup2(pipe2[0], STDIN_FILENO);
         close(pipe2[0]);
@@ -64,9 +95,9 @@ int main() {
     srand(time(NULL));
 
     while (1) {
-        printf("Введите строку (или 'exit' для завершения): ");
-        nread = getline(&input, &len, stdin);
-        input[strcspn(input, "\n")] = 0; 
+        Print("Введите строку (или 'exit' для завершения): ");
+        nread = Getline(&input, &len, STDIN_FILENO);
+        input[strcspn(input, "\n")] = 0;
 
         if (strcmp(input, "exit") == 0) {
             break;
@@ -87,7 +118,7 @@ int main() {
     wait(NULL);
     wait(NULL);
 
-    printf("Работа завершена.\n");
+    Print("Работа завершена.\n");
 
     free(input);
     free(file1);
