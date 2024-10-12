@@ -42,14 +42,14 @@ int read_double(char* inp, double* number) {
 }
 
 
-int main() {
+int main(int argc, char* argv[]) {
     char c;
     char word[64];
     char *ptr = word;
     double num;
     double sum = 0;
     int code;
-    
+
     while (read(STDIN_FILENO, &c, sizeof(char)) != 0) {
         if (c != ' ' && c != '\n') {
             *ptr = c;
