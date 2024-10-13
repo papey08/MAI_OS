@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[0]);
 
-        if ((code = execve("child", argv, NULL)) != 0) {
+        if ((code = execve("child.out", argv, NULL)) != 0) {
             write(STDERR_FILENO, &code, sizeof(int));
         }
     } else {
@@ -35,9 +35,9 @@ int main(int argc, char* argv[]) {
         while (read(STDIN_FILENO, &c, sizeof(char)) != 0) {
             write(STDOUT_FILENO, &c, sizeof(char));
         }
-        close(STDOUT_FILENO);
-        close(STDIN_FILENO);
     }
+    close(STDOUT_FILENO);
+    close(STDIN_FILENO);
 
     return 0;
 }

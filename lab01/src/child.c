@@ -75,9 +75,6 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-
-    close(STDOUT_FILENO);
-    close(STDIN_FILENO);
       
     return 0;
 }
