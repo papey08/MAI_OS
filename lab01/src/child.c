@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -32,16 +31,21 @@ int main() {
                     goto exit_loop;
                 }
 
-                printf("Чтение строки: '%s'\n", line);
+                DWORD bytes_written;
+                char message[BUFFER_SIZE * 2];
+                int message_len = wsprintfA(message, "Чтение строки: '%s'\r\n", line);
+                WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), message, message_len, &bytes_written, NULL);
                 
                 if (line_pos > 0 && isupper(line[0])) {
-                    printf("%s\n", line);
+                    WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), line, line_pos, &bytes_written, NULL);
+                    WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), "\r\n", 2, &bytes_written, NULL);
                 } else if (line_pos > 0) {
-                    const char *error_message = "Ошибка: строка должна начинаться с заглавной буквы\n";
+                    const char *error_message = "Ошибка: строка должна начинаться с заглавной буквы\r\n";
                     DWORD bytes_written;
                     success = WriteFile(pipe2_write, error_message, strlen(error_message), &bytes_written, NULL);
                     if (!success) {
-                        fprintf(stderr, "Ошибка при записи в pipe2\n");
+                        char err_msg[] = "Ошибка при записи в pipe2\r\n";
+                        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
                         return 1;
                     }
                 }

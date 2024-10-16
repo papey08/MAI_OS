@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -25,7 +24,6 @@ void cleanup() {
         pi.hThread = NULL;
     }
     if (file_handle != INVALID_HANDLE_VALUE) {
-        // Убираем дублирующую запись строки в файл
         FlushFileBuffers(file_handle);
         CloseHandle(file_handle);
         file_handle = INVALID_HANDLE_VALUE;
@@ -41,10 +39,11 @@ void cleanup() {
     }
 }
 
-
 BOOL WINAPI CtrlHandler(DWORD fdwCtrlType) {
     if (fdwCtrlType == CTRL_C_EVENT) {
-        printf("\nПолучен сигнал завершения. Завершение работы...\n");
+        DWORD bytes_written;
+        const char *msg = "\nПолучен сигнал завершения. Завершение работы...\n";
+        WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), msg, strlen(msg), &bytes_written, NULL);
         running = FALSE;
         const char *exit_signal = "EXIT\n";
         WriteFile(pipe1_write, exit_signal, strlen(exit_signal), NULL, NULL);
@@ -67,25 +66,33 @@ int main() {
     char error_message[BUFFER_SIZE];
 
     if (!SetConsoleCtrlHandler(CtrlHandler, TRUE)) {
-        printf("ERROR: Could not set control handler\n");
+        const char *err_msg = "ERROR: Could not set control handler\n";
+        DWORD bytes_written;
+        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
         return 1;
     }
 
-    printf("Введите имя файла для записи: ");
-    fgets(filename, BUFFER_SIZE, stdin);
-    filename[strcspn(filename, "\n")] = '\0';
+    const char *prompt = "Введите имя файла для записи: ";
+    DWORD bytes_written;
+    WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), prompt, strlen(prompt), &bytes_written, NULL);
+
+    DWORD bytes_read;
+    ReadConsole(GetStdHandle(STD_INPUT_HANDLE), filename, BUFFER_SIZE, &bytes_read, NULL);
+    filename[bytes_read - 2] = '\0';
 
     sa.nLength = sizeof(SECURITY_ATTRIBUTES);
     sa.bInheritHandle = TRUE;
     sa.lpSecurityDescriptor = NULL;
 
     if (!CreatePipe(&pipe1_read, &pipe1_write, &sa, 0)) {
-        fprintf(stderr, "Ошибка при создании pipe1\n");
+        const char *err_msg = "Ошибка при создании pipe1\n";
+        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
         return 1;
     }
 
     if (!CreatePipe(&pipe2_read, &pipe2_write, &sa, 0)) {
-        fprintf(stderr, "Ошибка при создании pipe2\n");
+        const char *err_msg = "Ошибка при создании pipe2\n";
+        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
         CloseHandle(pipe1_read);
         CloseHandle(pipe1_write);
         return 1;
@@ -98,7 +105,8 @@ int main() {
     si.dwFlags |= STARTF_USESTDHANDLES;
 
     if (!CreateProcess(NULL, "child.exe", NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-        fprintf(stderr, "Ошибка при создании дочернего процесса\n");
+        const char *err_msg = "Ошибка при создании дочернего процесса\n";
+        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
         cleanup();
         return 1;
     }
@@ -108,15 +116,19 @@ int main() {
 
     file_handle = CreateFile(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (file_handle == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "Ошибка при открытии файла: %d\n", GetLastError());
+        char err_msg[BUFFER_SIZE];
+        wsprintfA(err_msg, "Ошибка при открытии файла: %d\n", GetLastError());
+        WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
         cleanup();
         return 1;
     }
 
     while (running) {
-        printf("Введите строку (для выхода введите 'exit'): ");
-        fgets(input, BUFFER_SIZE, stdin);
-        input[strcspn(input, "\n")] = '\0';
+        const char *input_prompt = "Введите строку (для выхода введите 'exit'): ";
+        WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), input_prompt, strlen(input_prompt), &bytes_written, NULL);
+
+        ReadConsole(GetStdHandle(STD_INPUT_HANDLE), input, BUFFER_SIZE, &bytes_read, NULL);
+        input[bytes_read - 2] = '\0';
 
         if (strcmp(input, "exit") == 0) {
             const char *exit_signal = "EXIT\n";
@@ -124,26 +136,24 @@ int main() {
             break;
         }
 
-        DWORD bytes_written;
         success = WriteFile(pipe1_write, input, strlen(input), &bytes_written, NULL);
         if (!success || bytes_written != strlen(input)) {
-            fprintf(stderr, "Ошибка при записи в pipe1\n");
+            const char *err_msg = "Ошибка при записи в pipe1\n";
+            WriteConsole(GetStdHandle(STD_ERROR_HANDLE), err_msg, strlen(err_msg), &bytes_written, NULL);
             break;
         }
 
         WriteFile(pipe1_write, "\n", 1, &bytes_written, NULL);
 
-        DWORD bytes_read;
         success = ReadFile(pipe2_read, error_message, BUFFER_SIZE - 1, &bytes_read, NULL);
         if (success && bytes_read > 0) {
             error_message[bytes_read] = '\0';
-            printf("%s", error_message);
+            WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), error_message, bytes_read, &bytes_written, NULL);
         } else {
             strncpy(last_input, input, BUFFER_SIZE);
             last_input[BUFFER_SIZE - 1] = '\0';
-            DWORD bytes_written_to_file;
-            WriteFile(file_handle, input, strlen(input), &bytes_written_to_file, NULL);
-            WriteFile(file_handle, "\n", 1, &bytes_written_to_file, NULL);
+            WriteFile(file_handle, input, strlen(input), &bytes_written, NULL);
+            WriteFile(file_handle, "\r\n", 2, &bytes_written, NULL);
             FlushFileBuffers(file_handle);
         }
     }
