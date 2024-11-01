@@ -47,11 +47,15 @@ double det(vector<vector<double>> &mat, size_t rem) {
     vector<double> dets(mat.size());
     vector<args_t *> args(mat.size());
 
-    if (rem > 0) {
+    if (rem > 1) {
         vector<pthread_t> th(min(rem, mat.size()));
         rem -= th.size();
         size_t first = rem % (th.size() - 1);
         size_t rest = rem / (th.size() - 1);
+        if (rest == 1) {
+            first = rem;
+            rest = 0;
+        }
         size_t i = 0;
         while (i < mat.size()) {
             size_t j;
