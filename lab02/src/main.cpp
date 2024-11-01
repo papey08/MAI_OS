@@ -111,6 +111,45 @@ double determinant(vector<vector<double>> &mat, size_t thread_cnt) {
     return det(mat, thread_cnt);
 }
 
+string to_string(long n, size_t d = 1) {
+    string s;
+    bool neg = n < 0;
+    if (neg)
+        n *= -1;
+
+    while (n > 0) {
+        s.push_back('0' + (n % 10));
+        n /= 10;
+    }
+
+    while (s.size() < d)
+        s.push_back('0');
+
+    if (neg)
+        s.push_back('-');
+
+    for (size_t i = 0; i < s.size() / 2; i++) {
+        char tmp = s[i];
+        s[i] = s[s.size() - i - 1];
+        s[s.size() - i - 1] = tmp;
+    }
+    return s;
+}
+
+string to_string(double n, size_t d = 6) {
+    string s;
+    long n_i = n;
+    s += to_string(n_i);
+    if (d > 0) {
+        s.push_back('.');
+        n = abs(n);
+        n -= n_i;
+        n *= pow(10, d);
+        s += to_string((long)n, d);
+    }
+    return s;
+}
+
 int main(int argc, const char *argw[]) {
     if (argc < 2) {
         print(STDERR_FILENO, "ERROR: number of threads not provided\n");
@@ -130,16 +169,22 @@ int main(int argc, const char *argw[]) {
         return -1;
     }
 
-    // vector<vector<double>> c = {{0, 1, 2, 4, 5, 6},     {2, 3, 1, 0, -1, -2},
-    //                             {12, 321, 1, 2, 41, 1}, {12, 31, 1, 2, 41,
-    //                             1},
-    //                             {-12, 32, 1, 2, 0, -1}, {1, 0, 0, 0, 1, 2}};
+    {
+        vector<vector<double>> c = {
+            {0, 1, 2, 4, 5, 6},     {2, 3, 1, 0, -1, -2},
+            {12, 321, 1, 2, 41, 1}, {12, 31, 1, 2, 41, 1},
+            {-12, 32, 1, 2, 0, -1}, {1, 0, 0, 0, 1, 2}};
+        double det = determinant(c, thread_number);
+        string res = "|mat| = " + to_string(det) + "\n";
+        print(STDOUT_FILENO, res);
+    }
 
-    vector<vector<double>> c(10, vector<double>(10, 1));
-
-    double det = determinant(c, thread_number);
-    string res = "|mat| = " + std::to_string(det) + "\n";
-    print(STDOUT_FILENO, res);
+    {
+        vector<vector<double>> c(10, vector<double>(10, 1));
+        double det = determinant(c, thread_number);
+        string res = "|mat| = " + to_string(det) + "\n";
+        print(STDOUT_FILENO, res);
+    }
 
     return 0;
 }
