@@ -69,16 +69,17 @@ double det(vector<vector<double>> &mat, size_t rem) {
                 args[i]->det = &dets[i];
                 args[i]->i = i;
                 args[i]->cnt = j == 0 ? first : rest;
-                int s = pthread_create(&th[j], NULL, calc, args[i]);
-                if (s != 0) {
-                    print(STDOUT_FILENO,
-                          "ERROR: failed to create new thread\n");
+                if (pthread_create(&th[j], NULL, calc, args[i])) {
+                    print(STDOUT_FILENO, "ERROR: failed to create thread\n");
                     exit(-1);
                 }
                 i++;
             }
             for (size_t k = 0; k < j; k++) {
-                pthread_join(th[k], NULL);
+                if (pthread_join(th[k], NULL)) {
+                    print(STDOUT_FILENO, "ERROR: failed to join thread\n");
+                    exit(-1);
+                }
             }
         }
     } else {
