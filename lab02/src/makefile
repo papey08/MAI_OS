@@ -1,16 +1,13 @@
-CC = clang
-CFLAGS = -std=gnu17 -pedantic -Wall -Wextra -g
+CC = clang++
+CFLAGS = -std=c++23 -pedantic -Wall -Wextra -g
 TARGET = main.out
 
 .PHONY: clean run build
 
 build: main.out 
 
-main.out: main.o 
-	${CC} -o $@ $^
-
-main.o: main.c
-	${CC} ${CFLAGS} -c -o $@ $<
+main.out: main.cpp
+	${CC} ${CFLAGS} -o $@ $<
 
 clean:
 	@rm -f ./*.o
