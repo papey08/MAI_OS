@@ -46,6 +46,17 @@ double det(vector<vector<double>> &mat, size_t rem) {
 
     vector<double> dets(mat.size());
     vector<args_t *> args(mat.size());
+    for (size_t i = 0; i < mat.size(); i++) {
+        args[i] = (args_t *)malloc(sizeof(args_t));
+        if (args[i] == NULL) {
+            print(STDOUT_FILENO, "ERROR: buy more ram\n");
+            exit(-1);
+        }
+        args[i]->mat = &mat;
+        args[i]->det = &dets[i];
+        args[i]->i = i;
+        args[i]->cnt = 0;
+    }
 
     if (rem > 1) {
         vector<pthread_t> th(min(rem, mat.size()));
@@ -56,41 +67,31 @@ double det(vector<vector<double>> &mat, size_t rem) {
             first = rem;
             rest = 0;
         }
-        size_t i = 0;
-        while (i < mat.size()) {
-            size_t j;
-            for (j = 0; j < th.size() && i < mat.size(); j++) {
-                args[i] = (args_t *)malloc(sizeof(args_t));
-                if (args[i] == NULL) {
-                    print(STDOUT_FILENO, "ERROR: buy more ram\n");
-                    exit(-1);
-                }
-                args[i]->mat = &mat;
-                args[i]->det = &dets[i];
-                args[i]->i = i;
-                args[i]->cnt = j == 0 ? first : rest;
-                if (pthread_create(&th[j], NULL, calc, args[i])) {
-                    print(STDOUT_FILENO, "ERROR: failed to create thread\n");
-                    exit(-1);
-                }
-                i++;
+        size_t j = 0;
+        for (size_t i = 0; i < mat.size(); i++) {
+            if (mat[0][i] == 0)
+                continue;
+            args[i]->cnt = (j % th.size()) == 0 ? first : rest;
+            if (j >= th.size() && pthread_join(th[j % th.size()], NULL)) {
+                print(STDOUT_FILENO, "ERROR: failed to join thread\n");
+                exit(-1);
             }
-            for (size_t k = 0; k < j; k++) {
-                if (pthread_join(th[k], NULL)) {
-                    print(STDOUT_FILENO, "ERROR: failed to join thread\n");
-                    exit(-1);
-                }
+            if (pthread_create(&th[j % th.size()], NULL, calc, args[i])) {
+                print(STDOUT_FILENO, "ERROR: failed to create thread\n");
+                exit(-1);
+            }
+            j++;
+        }
+        for (size_t i = 0; i < th.size(); i++) {
+            if (pthread_join(th[i % th.size()], NULL)) {
+                print(STDOUT_FILENO, "ERROR: failed to join thread\n");
+                exit(-1);
             }
         }
     } else {
-        for (size_t i = 0; i < mat.size(); i++) {
-            args[i] = (args_t *)malloc(sizeof(args_t));
-            args[i]->mat = &mat;
-            args[i]->det = &dets[i];
-            args[i]->i = i;
-            args[i]->cnt = 0;
-            calc(args[i]);
-        }
+        for (size_t i = 0; i < mat.size(); i++)
+            if (mat[0][i] != 0)
+                calc(args[i]);
     }
 
     double res = 0;
