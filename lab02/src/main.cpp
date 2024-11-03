@@ -1,3 +1,4 @@
+#include <iostream>
 #include <pthread.h>
 #include <unistd.h>
 #include <vector>
@@ -82,7 +83,7 @@ double det(vector<vector<double>> &mat, size_t rem) {
             }
             j++;
         }
-        for (size_t i = 0; i < th.size(); i++) {
+        for (size_t i = 0; i < min(th.size(), j); i++) {
             if (pthread_join(th[i % th.size()], NULL)) {
                 print(STDOUT_FILENO, "ERROR: failed to join thread\n");
                 exit(-1);
