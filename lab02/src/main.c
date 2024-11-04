@@ -6,6 +6,8 @@
 #include <time.h>
 
 #define MAX_THREADS 10
+#define BUF_SIZE 1024
+#define RES_SIZE 256
 
 typedef struct {
     int mod;
@@ -68,37 +70,68 @@ int str_to_int(const char* string) {
 void* find_inclusions_by_mod(void* data) {
     Data* d = (Data*)data;
     int symb = d->mod;
-    int index; //add inclusion
     int i; //compare buf and pattern
-    int read_len;
+    int bytes_read = 0;
 
-    char* buf = malloc((d->pattern_len + 1) * sizeof(char));
-    buf[d->pattern_len] = '\0';
+    char* buf = malloc(BUF_SIZE * sizeof(char));
+    if (!buf) {
+        write(STDOUT_FILENO, "fail to alloc\n", 15);
+        return NULL;
+    }
+    int buf_offset = 0; //current index in buf
 
+    pthread_mutex_lock(d->mutex_file);
+    lseek(d->fd, symb, SEEK_SET);
+    bytes_read = read(d->fd, buf, BUF_SIZE);
+    pthread_mutex_unlock(d->mutex_file);
+
+    int my_res_size = RES_SIZE / d->N;
+    int* my_res = malloc(sizeof(int) * my_res_size);
+    int my_counter = 0;
     
     while (1) {
-        pthread_mutex_lock(d->mutex_file);
-        lseek(d->fd, symb, SEEK_SET);
-        read_len = read(d->fd, buf, d->pattern_len);
-        pthread_mutex_unlock(d->mutex_file);
-        if (read_len != d->pattern_len) break;
+        if ((bytes_read - buf_offset) < d->pattern_len) {
+            if (bytes_read < BUF_SIZE) break;
+
+            pthread_mutex_lock(d->mutex_file);
+            lseek(d->fd, symb, SEEK_SET);
+            bytes_read = read(d->fd, buf, BUF_SIZE);
+            buf_offset = 0;
+            pthread_mutex_unlock(d->mutex_file);
+
+            if (bytes_read < d->pattern_len) break;
+        }
+
         i = 0;
-        while ((buf[i] == (d->pattern)[i]) && (buf[i])) {
+        while ((d->pattern)[i] && (buf[buf_offset + i] == (d->pattern)[i])) {
             i++;
         }
-        if (!buf[i]) {
-            pthread_mutex_lock(d->mutex_res);
-            index = *(d->counter);
-            if (index + 1 == *(d->res_size)) {
-                *(d->res_size) *= 2;
-                *(d->res) = (unsigned int*)malloc(*(d->res_size) * sizeof(unsigned int));
+
+        if (!(d->pattern)[i]) {
+            my_res[my_counter] = symb;
+            my_counter ++;
+            if (my_counter >= my_res_size) {
+                my_res_size *= 2;
+                my_res = (unsigned int*)realloc(my_res, *(d->res_size) * sizeof(unsigned int));
             }
-            (*(d->counter))++;
-            pthread_mutex_unlock(d->mutex_res);
-            (*(d->res))[index] = symb;
         }
         symb += d->N;
+        buf_offset += d->N;
     }
+
+    pthread_mutex_lock(d->mutex_res);
+    int index = *(d->counter);
+    if (index + my_counter >= *(d->res_size)) {
+        *(d->res_size) =  (*(d->res_size) + my_counter) * 2;
+        *(d->res) = (unsigned int*)realloc(*(d->res), *(d->res_size) * sizeof(unsigned int));
+    }
+    (*(d->counter)) = (*(d->counter)) + my_counter;
+    pthread_mutex_unlock(d->mutex_res);
+
+    for (int i = 0; i < my_counter; i++) {
+        (*(d->res))[index + i] = my_res[i];
+    }
+
     free(buf);
     return NULL;
 }
@@ -129,7 +162,7 @@ int main(int argc, char* argv[]) {
     int pattern_len = strlen(argv[3]);
     char* pattern = (char*)malloc((pattern_len + 1) * sizeof(char));
     strcpy(pattern, argv[3]);
-    int res_size = 256;
+    int res_size = RES_SIZE;
     unsigned int* results = (unsigned int*)malloc(res_size * sizeof(unsigned int));
     int counter = 0;
 
@@ -151,7 +184,6 @@ int main(int argc, char* argv[]) {
         threads_data[i].mutex_file = &mutex_file;  
     }
 
-    clock_t start =clock();
     for (int i = 0; i < N; i++) {
         pthread_create(threads + i, NULL, &find_inclusions_by_mod, threads_data + i);
     }
@@ -159,16 +191,12 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < N; i++) {
         pthread_join(threads[i], NULL);
     }
-    clock_t end = clock();
 
     qsort(results, counter, sizeof(int), &uint_cmp);
 
     for (int i = 0; i < counter; i++) {
         print_unsigned_int(results[i]);
     }
-    write(STDOUT_FILENO, "clocks: ", 9);
-    print_unsigned_int(end - start);
-    //printf("%ld %ld\n", start, end); ///
 
     free(threads);
     free(threads_data);
