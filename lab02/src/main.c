@@ -65,14 +65,16 @@ void my_qsort(long long *begin, long long *end, int max_threads_count, long long
         switch (child)
         {
         case -1:
-            printf("fork error\n");
+            char msg[] = "fork error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
             (*running_threads)--;
             break;
         case 0:                  
             my_qsort(left, end, max_threads_count, running_threads, array_begin);
             (*running_threads)--; 
             if(shmdt(array_begin) < 0) { 
-                printf("shmdt error\n");
+                char msg[] = "shmdt error\n";
+                write(STDERR_FILENO, msg, sizeof(msg));
             }
             exit(0);
             break;
@@ -92,7 +94,8 @@ void my_qsort(long long *begin, long long *end, int max_threads_count, long long
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        printf("wrong number of args\n");
+        char msg[] = "wrong number of args\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         return -1;
     }
 
@@ -100,7 +103,8 @@ int main(int argc, char* argv[]) {
     
     FILE* file;
     if ((file = fopen("test.txt", "r")) == NULL) {
-        printf("file error\n");
+        char msg[] = "file error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         return -1;
     }
     long long n;
@@ -112,19 +116,22 @@ int main(int argc, char* argv[]) {
     key_t key;
 
     if((key = ftok(pathname, 0)) < 0) {
-        printf("ftok error\n");
+        char msg[] = "ftok error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         fclose(file);
         return -1;
     }
     
     if((shmid = shmget(key, (n + 1) * sizeof(long long), 0666|IPC_CREAT|IPC_EXCL)) < 0) {
-        printf("shmget error\n");
+        char msg[] = "shmged error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         fclose(file);
         return -1;
     }
     
     if((array = (long long *)shmat(shmid, NULL, 0)) == (long long *)(-1)) {
-        printf("shmat error\n");
+        char msg[] = "shmat\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         fclose(file);
         return -1;
     }
@@ -146,7 +153,8 @@ int main(int argc, char* argv[]) {
     printf("%d completed in %ldms\n", getpid(), time_stop());
 
     if ((file = fopen("test_out.txt", "w")) == NULL) {
-        printf("file error\n");
+        char msg[] = "file error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         return -1;
     }
 
@@ -157,11 +165,13 @@ int main(int argc, char* argv[]) {
     fclose(file);
 
     if(shmdt(array) < 0) { 
-        printf("shmdt error\n");
+        char msg[] = "shmdt error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         return -1;
     }
     if (shmctl(shmid, 0, NULL) < 0) {
-        printf("shmctl error\n");
+        char msg[] = "shmctl error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
         return -1;
     }
     return 0;
