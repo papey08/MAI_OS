@@ -59,7 +59,7 @@ void my_qsort(long long *begin, long long *end, int max_threads_count, long long
     }
     ++right;
     
-    if ((*running_threads < max_threads_count) && (end - begin > (int)1e5)) {
+    if ((*running_threads < max_threads_count) && (end - begin > (int)1e6)) {
         (*running_threads)++;
         pid_t child = fork();
         switch (child)
@@ -69,7 +69,7 @@ void my_qsort(long long *begin, long long *end, int max_threads_count, long long
             write(STDERR_FILENO, msg, sizeof(msg));
             (*running_threads)--;
             break;
-        case 0:                  
+        case 0:            
             my_qsort(left, end, max_threads_count, running_threads, array_begin);
             (*running_threads)--; 
             if(shmdt(array_begin) < 0) { 
