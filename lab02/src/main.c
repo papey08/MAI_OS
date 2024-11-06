@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t printMutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct Matrix {
     float** matrix;
@@ -18,15 +18,15 @@ typedef struct ThreadData {
     float** input;
     float** kernel;
     float** output;
-    int start_row;
-    int end_row;
+    int startRow;
+    int endRow;
     int rows;
     int cols;
-    int kernel_size;
+    int kernelSize;
     int id;
 } ThreadData;
 
-float** allocate_matrix(int rows, int cols) {
+float** AllocateMatrix(int rows, int cols) {
     float** matrix = (float**)malloc(rows * sizeof(float*));
     for (int i = 0; i < rows; i++) {
         matrix[i] = (float*)calloc(cols, sizeof(float));
@@ -36,7 +36,7 @@ float** allocate_matrix(int rows, int cols) {
 
 Matrix* CreateMatrix(int rows, int cols) {
     Matrix* m = (Matrix*)malloc(sizeof(Matrix));
-    m->matrix = allocate_matrix(rows + 2, cols + 2);
+    m->matrix = AllocateMatrix(rows + 2, cols + 2);
     m->rows = rows + 2;
     m->columns = cols + 2;
     return m;
@@ -79,34 +79,34 @@ Matrix* ProcessFile(const char* filename) {
 
 void* ApplyConvolutionThread(void* arg) {
     ThreadData* data = (ThreadData*)arg;
-    int offset = data->kernel_size / 2;
-    pthread_mutex_lock(&print_mutex);
+    int offset = data->kernelSize / 2;
+    pthread_mutex_lock(&printMutex);
     char msg[100];
-    snprintf(msg, sizeof(msg), "Работает %d поток с %d по %d ряд\n", data->id, data->start_row, data->end_row);
+    snprintf(msg, sizeof(msg), "Работает %d поток с %d по %d ряд\n", data->id, data->startRow, data->endRow);
     write(STDOUT_FILENO, msg, strlen(msg));
-    pthread_mutex_unlock(&print_mutex);
+    pthread_mutex_unlock(&printMutex);
 
-    for (int i = data->start_row; i < data->end_row; i++) {
+    for (int i = data->startRow; i < data->endRow; i++) {
         for (int j = offset; j < data->cols - offset; j++) {
             float sum = 0.0;
-            int row_offset = i - offset;
-            int col_offset = j - offset;
-            for (int ki = 0; ki < data->kernel_size; ki++) {
-                for (int kj = 0; kj < data->kernel_size; kj++) {
-                    sum += data->input[row_offset + ki][col_offset + kj] * data->kernel[ki][kj];
+            int rowOffset = i - offset;
+            int colOffset = j - offset;
+            for (int ki = 0; ki < data->kernelSize; ki++) {
+                for (int kj = 0; kj < data->kernelSize; kj++) {
+                    sum += data->input[rowOffset + ki][colOffset + kj] * data->kernel[ki][kj];
                 }
             }
             data->output[i][j] = sum;
         }
     }
-    pthread_mutex_lock(&print_mutex);
+    pthread_mutex_lock(&printMutex);
     snprintf(msg, sizeof(msg), "%d поток закончил работу\n", data->id);
     write(STDOUT_FILENO, msg, strlen(msg));
-    pthread_mutex_unlock(&print_mutex);
+    pthread_mutex_unlock(&printMutex);
     return NULL;
 }
 
-void save_matrix_to_file(float** matrix, int rows, int cols, const char* filename) {
+void SaveMatrixToFile(float** matrix, int rows, int cols, const char* filename) {
     int file = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (file < 0) {
         char msg[] = "Ошибка: не удалось сохранить файл.\n";
@@ -124,33 +124,33 @@ void save_matrix_to_file(float** matrix, int rows, int cols, const char* filenam
     close(file);
 }
 
-void ApplyConvolution(float** input, float** kernel, float** output, int rows, int cols, int kernel_size, int num_threads) {
-    pthread_t threads[num_threads];
-    ThreadData thread_data[num_threads];
+void ApplyConvolution(float** input, float** kernel, float** output, int rows, int cols, int kernelSize, int numThreads) {
+    pthread_t threads[numThreads];
+    ThreadData threadData[numThreads];
 
-    int offset = kernel_size / 2;
-    int rows_per_thread = (rows - 2 * offset) / num_threads;
-    int extra_rows = (rows - 2 * offset) % num_threads;
+    int offset = kernelSize / 2;
+    int rowsPerThread = (rows - 2 * offset) / numThreads;
+    int extraRows = (rows - 2 * offset) % numThreads;
 
-    for (int t = 0; t < num_threads; t++) {
-        thread_data[t].id = t;
-        thread_data[t].input = input;
-        thread_data[t].kernel = kernel;
-        thread_data[t].output = output;
-        thread_data[t].rows = rows;
-        thread_data[t].cols = cols;
-        thread_data[t].kernel_size = kernel_size;
-        thread_data[t].start_row = t * rows_per_thread + offset;
-        thread_data[t].end_row = (t + 1) * rows_per_thread + offset;
+    for (int t = 0; t < numThreads; t++) {
+        threadData[t].id = t;
+        threadData[t].input = input;
+        threadData[t].kernel = kernel;
+        threadData[t].output = output;
+        threadData[t].rows = rows;
+        threadData[t].cols = cols;
+        threadData[t].kernelSize = kernelSize;
+        threadData[t].startRow = t * rowsPerThread + offset;
+        threadData[t].endRow = (t + 1) * rowsPerThread + offset;
 
-        if (t == num_threads - 1) {
-            thread_data[t].end_row += extra_rows;
+        if (t == numThreads - 1) {
+            threadData[t].endRow += extraRows;
         }
 
-        pthread_create(&threads[t], NULL, ApplyConvolutionThread, &thread_data[t]);
+        pthread_create(&threads[t], NULL, ApplyConvolutionThread, &threadData[t]);
     }
 
-    for (int t = 0; t < num_threads; t++) {
+    for (int t = 0; t < numThreads; t++) {
         pthread_join(threads[t], NULL);
     }
 }
@@ -162,40 +162,35 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     int K = atoi(argv[1]);
-    int kernel_size = atoi(argv[2]);
-    int count_thread = atoi(argv[3]);
+    int kernelSize = atoi(argv[2]);
+    int countThread = atoi(argv[3]);
 
     Matrix* m = ProcessFile("gen.txt");
-    clock_t start, end;
-    double cpu_time_used;
-    start = clock();
-    if (kernel_size > m->rows || kernel_size > m->columns || kernel_size % 2 == 0) {
+
+    if (kernelSize > m->rows || kernelSize > m->columns || kernelSize % 2 == 0) {
         char msg[] = "Некорректный размер окна свёртки.\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
         return -1;
     }
 
-    float** kernel = allocate_matrix(kernel_size, kernel_size);
-    for (int i = 0; i < kernel_size; i++) {
-        for (int j = 0; j < kernel_size; j++) {
-            kernel[i][j] = 1.0 / (kernel_size * kernel_size);
+    float** kernel = AllocateMatrix(kernelSize, kernelSize);
+    for (int i = 0; i < kernelSize; i++) {
+        for (int j = 0; j < kernelSize; j++) {
+            kernel[i][j] = 1.0 / (kernelSize * kernelSize);
         }
     }
 
-    float** output = allocate_matrix(m->rows, m->columns);
+    float** output = AllocateMatrix(m->rows, m->columns);
 
     for (int k = 0; k < K; k++) {
-        ApplyConvolution(m->matrix, kernel, output, m->rows, m->columns, kernel_size, count_thread);
+        ApplyConvolution(m->matrix, kernel, output, m->rows, m->columns, kernelSize, countThread);
 
         float** temp = m->matrix;
         m->matrix = output;
         output = temp;
     }
-    end = clock();
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("%lf\n", cpu_time_used);
-    save_matrix_to_file(m->matrix, m->rows, m->columns, "output_matrix.txt");
-    pthread_mutex_destroy(&print_mutex);
+    SaveMatrixToFile(m->matrix, m->rows, m->columns, "output_matrix.txt");
+
     FreeMatrix(m);
     free(output);
     free(kernel);
