@@ -6,6 +6,10 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include <sys/shm.h>
+#include <sys/ipc.h>
+#include <errno.h>
+
 #include <sys/mman.h>
 
 #include <sys/time.h>
@@ -20,8 +24,6 @@ long time_stop()
   return dtv.tv_sec*1000+dtv.tv_usec/1000;
 }
 
-
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void lltostr(long long a, char **ptr) {
     if (a == 0) {
@@ -94,85 +96,37 @@ void sort(long long **left, long long **right, long long **seed, long long *begi
 }
 
 
-typedef struct {
-    long long *array;
-    long long *begin;
-    long long *end;
-    int *running_threads_count;
-    int max_threads_count;
-} qsort_args_t;
-
-void *qsort_thread(void *args) {
-    qsort_args_t *qsort_args = (qsort_args_t *)args;
-    int result = my_qsort(qsort_args->array, qsort_args->begin, qsort_args->end,
-                          qsort_args->running_threads_count, qsort_args->max_threads_count);
-    free(args);
-    return (void *)(long)result;
-}
-
 int my_qsort(long long *array, long long *begin, long long *end, int *running_threads_count, int max_threads_count) {
     if (end - begin < 2) {
         return 0;
     }
-    
     long long *seed = end - 1;
     long long *left = begin;
     long long *right = end - 2;
 
     sort(&left, &right, &seed, begin, end);
-
+   
     if (((end - left > 1e5)) && (*(running_threads_count) < max_threads_count)) {
-        if (pthread_mutex_lock(&mutex) != 0) {
-            char msg[] = "error locking mutex\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-            return 1;
-        }
-
         (*(running_threads_count))++;
-
-        if (pthread_mutex_unlock(&mutex) != 0) {
-            char msg[] = "error unlocking mutex\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
+        pid_t child = fork();
+        switch (child)
+        {
+        case -1:
+            char msg[] = "error unlocking the mutex\n";
+            write(STDERR_FILENO, msg, sizeof(msg) - 1);
             return 1;
+            break;
+        
+        case 0:
+            my_qsort(array, left, end, running_threads_count, max_threads_count);
+            (*running_threads_count)--;
+            exit(0);
+
+        default:
+            my_qsort(array, begin, right, running_threads_count, max_threads_count);
+            break;
         }
         
-        pthread_t thread;
-        qsort_args_t *args = malloc(sizeof(qsort_args_t));
-        if (args == NULL) {
-            char msg[] = "error allocating\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-            return 1;
-        }
-        args->array = array;
-        args->begin = left;
-        args->end = end;
-        args->running_threads_count = running_threads_count;
-        args->max_threads_count = max_threads_count;
-
-        if (pthread_create(&thread, NULL, qsort_thread, args) != 0) {
-            char msg[] = "error creating thread\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-            free(args);
-            return 1;
-        }
-
-        my_qsort(array, begin, right, running_threads_count, max_threads_count);
-        
-        pthread_join(thread, NULL);
-
-        if (pthread_mutex_lock(&mutex) != 0) {
-            char msg[] = "error locking mutex\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-            return 1;
-        }
-        
-        (*(running_threads_count))--;
-
-        if (pthread_mutex_unlock(&mutex) != 0) {
-            char msg[] = "error unlocking mutex\n";
-            write(STDOUT_FILENO, msg, sizeof(msg) - 1);
-            return 1;
-        }
     } else {
         my_qsort(array, left, end, running_threads_count, max_threads_count);
         my_qsort(array, begin, right, running_threads_count, max_threads_count);
@@ -191,7 +145,51 @@ int main(int argc, char* argv[]) {
 
     int max_threads_count = atoi(argv[1]);
    
-    int running_threads_count = 1;
+    int *running_threads_count;
+
+    int shmid;
+    char pathname[] = "main.c"; 
+    key_t key;
+
+    if((key = ftok(pathname, 0)) < 0) {
+        char msg[] = "ftok error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
+        return -1;
+    }
+    
+    if((shmid = shmget(key, sizeof(int), 0666|IPC_CREAT|IPC_EXCL)) < 0) {
+        if (errno = EEXIST) {
+            if (shmctl(shmid, 0, NULL) < 0) {
+                char msg[] = "shmctl error\n";
+                write(STDERR_FILENO, msg, sizeof(msg));
+                return -1;
+            }
+            if((shmid = shmget(key, sizeof(int), 0666|IPC_CREAT|IPC_EXCL)) < 0) {
+                char msg[] = "shmget error\n";
+                write(STDERR_FILENO, msg, sizeof(msg));
+                return -1;
+            }
+        } else {
+            char msg[] = "shmget error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+    }
+    
+    if((running_threads_count = (int *)shmat(shmid, NULL, 0)) == (int *)(-1)) {
+        char msg[] = "shmat\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
+
+        if (shmctl(shmid, 0, NULL) < 0) {
+            char msg[] = "shmctl error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+
+        return -1;
+    }
+
+    (*running_threads_count) = 1;
 
     long long n = (long long)(1e8);
 
@@ -200,6 +198,17 @@ int main(int argc, char* argv[]) {
         char msg[] = "file error\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
 
+        if(shmdt(running_threads_count) < 0) { 
+            char msg[] = "shmdt error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+        if (shmctl(shmid, 0, NULL) < 0) {
+            char msg[] = "shmctl error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+
         return -1;
     }
 
@@ -207,37 +216,32 @@ int main(int argc, char* argv[]) {
     // long long array[6] = {1LL, 5LL, 9LL, 2LL, 8LL, 13LL};
 
     long long *array;
-    if ((array = mmap(NULL, n * sizeof(long long), PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0)) == (void *)(-1)) {
+    if ((array = mmap(NULL, n * sizeof(long long), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0)) == (void *)(-1)) {
         char msg[] = "mmap error\n";
         write(STDERR_FILENO, msg, sizeof(msg));
 
         close(fd);
+        if(shmdt(running_threads_count) < 0) { 
+            char msg[] = "shmdt error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+        if (shmctl(shmid, 0, NULL) < 0) {
+            char msg[] = "shmctl error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+
         return -1;
     }   
 
     time_start();
     write(STDOUT_FILENO, "started\n", sizeof("started\n") - 1);
-
-    pthread_t thread1;
-    qsort_args_t *args = malloc(sizeof(qsort_args_t));
-    args->array = array;
-    args->begin = array;
-    args->end = array + n;
-    args->max_threads_count = max_threads_count;
-    args->running_threads_count = &running_threads_count;
-
-    if (pthread_create(&thread1, NULL, qsort_thread, args) != 0) {
-        char msg[] = "pthread_create error\n";
-        write(STDERR_FILENO, msg, sizeof("pthread_create error\n") - 1);
-        free(args);
-
-        munmap(array, n * sizeof(long long));
-        close(fd);
-        return -1;
+    my_qsort(array, array, array + n, running_threads_count, max_threads_count);
+    (*running_threads_count)--;
+    while (*running_threads_count > 0) {
+        wait(0);
     }
-
-    pthread_join(thread1, NULL);
-
     long long time = (long long)time_stop();
 
     write(STDOUT_FILENO, "completed in ", sizeof("completed in ") - 1);
@@ -249,6 +253,16 @@ int main(int argc, char* argv[]) {
 
         munmap(array, n * sizeof(long long));
         close(fd);
+        if(shmdt(running_threads_count) < 0) { 
+            char msg[] = "shmdt error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
+        if (shmctl(shmid, 0, NULL) < 0) {
+            char msg[] = "shmctl error\n";
+            write(STDERR_FILENO, msg, sizeof(msg));
+            return -1;
+        }
         
         return 1;
     }
@@ -263,6 +277,16 @@ int main(int argc, char* argv[]) {
     
     munmap(array, n * sizeof(long long));
     close(fd);
+    if(shmdt(running_threads_count) < 0) { 
+        char msg[] = "shmdt error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
+        return -1;
+    }
+    if (shmctl(shmid, 0, NULL) < 0) {
+        char msg[] = "shmctl error\n";
+        write(STDERR_FILENO, msg, sizeof(msg));
+        return -1;
+    }
 
     return 0;
 }
