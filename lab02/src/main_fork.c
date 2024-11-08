@@ -274,7 +274,7 @@ int main(int argc, char* argv[]) {
 
     check_if_sorted(array, n);
     //msync(array,  n * sizeof(long long), MS_SYNC);
-    
+    free(running_threads_count);
     munmap(array, n * sizeof(long long));
     close(fd);
     if(shmdt(running_threads_count) < 0) { 
