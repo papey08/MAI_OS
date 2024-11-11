@@ -3,8 +3,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <string.h>
+
+#define EPS 0.0001
 
 pthread_mutex_t printMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -50,6 +51,43 @@ void FreeMatrix(Matrix* m) {
     free(m);
 }
 
+
+int ParseInt(const char* str, int* index) {
+    int num = 0;
+    while (str[*index] >= '0' && str[*index] <= '9') {
+        num = num * 10 + (str[*index] - '0');
+        (*index)++;
+    }
+    (*index)++;
+    return num;
+}
+
+float ParseFloat(const char* str, int* index) {
+
+    float num = 0;
+    int sign = 1;
+    if (str[*index] == '-') {
+        sign = -1;
+        (*index)++;
+    }
+    while (str[*index] >= '0' && str[*index] <= '9') {
+        
+        num = num * 10 + (str[*index] - '0');
+        (*index)++;
+    }
+    if (str[*index] == '.') {
+        (*index)++;
+        float factor = 0.1;
+        while (str[*index] >= '0' && str[*index] <= '9' && (factor > EPS)) {
+            num += (str[*index] - '0') * factor;
+            factor *= 0.1;
+            (*index)++;
+        }
+    }
+    (*index)++;
+    return sign * num;
+}
+
 Matrix* ProcessFile(const char* filename) {
     int file = open(filename, O_RDONLY);
     if (file < 0) {
@@ -58,19 +96,26 @@ Matrix* ProcessFile(const char* filename) {
         return NULL;
     }
 
-    int rows, cols;
     char buffer[100];
-    int len = read(file, buffer, sizeof(buffer));
+    int len = read(file, buffer, sizeof(buffer) - 1);
+    if (len <= 0) {
+        close(file);
+        return NULL;
+    }
     buffer[len] = '\0';
-    sscanf(buffer, "%d %d", &rows, &cols);
+
+    int index = 0;
+    int rows = ParseInt(buffer, &index);
+    int cols = ParseInt(buffer, &index);
 
     Matrix* m = CreateMatrix(rows, cols);
 
-    for (int i = 0; i < rows; i++) {
+     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            len = read(file, buffer, sizeof(buffer));
-            buffer[len] = '\0';
-            sscanf(buffer, "%f", &m->matrix[i + 1][j + 1]);
+            while (buffer[index] == ' ' || buffer[index] == '\n') {
+                index++;
+            }
+            m->matrix[i+1][j+1] = ParseFloat(buffer, &index);
         }
     }
     close(file);
@@ -80,11 +125,7 @@ Matrix* ProcessFile(const char* filename) {
 void* ApplyConvolutionThread(void* arg) {
     ThreadData* data = (ThreadData*)arg;
     int offset = data->kernelSize / 2;
-    pthread_mutex_lock(&printMutex);
-    char msg[100];
-    snprintf(msg, sizeof(msg), "Работает %d поток с %d по %d ряд\n", data->id, data->startRow, data->endRow);
-    write(STDOUT_FILENO, msg, strlen(msg));
-    pthread_mutex_unlock(&printMutex);
+
 
     for (int i = data->startRow; i < data->endRow; i++) {
         for (int j = offset; j < data->cols - offset; j++) {
@@ -99,29 +140,70 @@ void* ApplyConvolutionThread(void* arg) {
             data->output[i][j] = sum;
         }
     }
-    pthread_mutex_lock(&printMutex);
-    snprintf(msg, sizeof(msg), "%d поток закончил работу\n", data->id);
-    write(STDOUT_FILENO, msg, strlen(msg));
-    pthread_mutex_unlock(&printMutex);
+
     return NULL;
 }
 
-void SaveMatrixToFile(float** matrix, int rows, int cols, const char* filename) {
+void FloatToStr(float num, char* buffer, int precision) {
+    int i = 0;
+    int integerPart = (int)num;
+    float fractionalPart = num - integerPart;
+
+    if (integerPart == 0) {
+        buffer[i++] = '0';
+    } else {
+        if (integerPart < 0) {
+            buffer[i++] = '-';
+            integerPart = -integerPart;
+            fractionalPart = -fractionalPart;
+        }
+        int start = i;
+        while (integerPart > 0) {
+            buffer[i++] = '0' + (integerPart % 10);
+            integerPart /= 10;
+        }
+        for (int j = start; j < (i + start) / 2; j++) {
+            char temp = buffer[j];
+            buffer[j] = buffer[i - 1 - (j - start)];
+            buffer[i - 1 - (j - start)] = temp;
+        }
+    }
+
+
+    buffer[i++] = '.';
+
+
+    for (int p = 0; p < precision; p++) {
+        fractionalPart *= 10;
+        int digit = (int)fractionalPart;
+        buffer[i++] = '0' + digit;
+        fractionalPart -= digit;
+    }
+
+    buffer[i] = '\0';
+}
+
+int SaveMatrixToFile(float** matrix, int rows, int cols, const char* filename) {
     int file = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (file < 0) {
         char msg[] = "Ошибка: не удалось сохранить файл.\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
-        return;
+        return 0;
     }
+
     char buffer[50];
     for (int i = 1; i < rows - 1; i++) {
         for (int j = 1; j < cols - 1; j++) {
-            int len = snprintf(buffer, sizeof(buffer), "%6.2f ", matrix[i][j]);
+            FloatToStr(matrix[i][j], buffer, 2);
+            int len = 0;
+            while (buffer[len] != '\0') len++;
+            buffer[len++] = ' ';
             write(file, buffer, len);
         }
         write(file, "\n", 1);
     }
     close(file);
+    return 1;
 }
 
 void ApplyConvolution(float** input, float** kernel, float** output, int rows, int cols, int kernelSize, int numThreads) {
@@ -176,7 +258,7 @@ int main(int argc, char* argv[]) {
     float** kernel = AllocateMatrix(kernelSize, kernelSize);
     for (int i = 0; i < kernelSize; i++) {
         for (int j = 0; j < kernelSize; j++) {
-            kernel[i][j] = 1.0 / (kernelSize * kernelSize);
+            kernel[i][j] = 1.0;
         }
     }
 
@@ -189,7 +271,16 @@ int main(int argc, char* argv[]) {
         m->matrix = output;
         output = temp;
     }
-    SaveMatrixToFile(m->matrix, m->rows, m->columns, "output_matrix.txt");
+
+    if (!SaveMatrixToFile(m->matrix, m->rows, m->columns, "output_matrix.txt")) {
+        char msg[] = "Матрица не сохранена\n";
+        write(STDERR_FILENO, msg, sizeof(msg) - 1);
+        return 1;
+    } else {
+        char msg[] = "Матрица сохранена\n";
+        write(STDERR_FILENO, msg, sizeof(msg) - 1);
+        return 1;
+    }
 
     FreeMatrix(m);
     free(output);
