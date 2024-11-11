@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
 
     close(file);
 
-    uint64_t average = (totalCount > 0) ? (sum / totalCount) : 0;  // Вычисляем среднее арифметическое
+    uint64_t average = (totalCount > 0) ? (sum / totalCount) : 0;
 
     char result[64];
     uint64ToStr(average, result);
