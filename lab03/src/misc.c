@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 int itoa(long n, char *res, int d) {
     int neg = 0;
@@ -67,4 +68,14 @@ int read_line(int fd, char **buf, int *buf_size) {
 int print(int fd, const char *s) {
     int n = strlen(s);
     return write(fd, s, n);
+}
+
+void print_error(const char *s) {
+    char out[1024] = {0};
+    strcat(out, "ERROR: ");
+    strcat(out, s);
+    strcat(out, "\n");
+    strcat(out, strerror(errno));
+    strcat(out, "\n");
+    print(STDERR_FILENO, out);
 }
