@@ -15,7 +15,7 @@ int main(void) {
         return -1;
     }
 
-    int mem_fd = shm_open(MEM, O_RDWR, 0);
+    int mem_fd = shm_open(MEM, O_WRONLY, 0);
     if (mem_fd == -1) {
         print_error("failed to open shared memory");
         exit(-1);
@@ -34,7 +34,7 @@ int main(void) {
     }
 
     char *buf =
-        mmap(NULL, MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+        mmap(NULL, MEM_SIZE, PROT_WRITE, MAP_SHARED, mem_fd, 0);
     if (!buf) {
         print_error("failed to mmap");
         exit(-1);

@@ -30,7 +30,7 @@ int main(int argc, char *argw[]) {
     }
     free(fname);
 
-    int mem_fd = shm_open(MEM, O_RDWR | O_CREAT, 0777);
+    int mem_fd = shm_open(MEM, O_RDONLY | O_CREAT, 0777);
     if (mem_fd == -1) {
         print_error("failed to open shared memory");
         close(fd);
@@ -43,7 +43,7 @@ int main(int argc, char *argw[]) {
         exit(-1);
     }
 
-    sem_t *empty = sem_open(SEM_EMPTY, O_RDWR | O_CREAT, 0777, 1);
+    sem_t *empty = sem_open(SEM_EMPTY, O_CREAT, 0777, 1);
     if (empty == SEM_FAILED) {
         print_error("failed to create empty semaphore");
         close(fd);
@@ -51,7 +51,7 @@ int main(int argc, char *argw[]) {
         exit(-1);
     }
 
-    sem_t *full = sem_open(SEM_FULL, O_RDWR | O_CREAT, 0777, 0);
+    sem_t *full = sem_open(SEM_FULL, O_CREAT, 0777, 0);
     if (full == SEM_FAILED) {
         print_error("failed to create full semaphore");
         close(fd);
@@ -80,8 +80,7 @@ int main(int argc, char *argw[]) {
         print_error("failed to fork process");
         exit(-1);
     } else {
-        char *buf =
-            mmap(NULL, MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+        char *buf = mmap(NULL, MEM_SIZE, PROT_READ, MAP_SHARED, mem_fd, 0);
         if (!buf) {
             print_error("failed to mmap");
             sem_unlink(SEM_EMPTY);
