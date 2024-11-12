@@ -63,6 +63,7 @@ int main(void) {
         buf[n++] = 0;
         sem_post(full);
     }
+    munmap(buf, MEM_SIZE);
     free(input_buffer);
     return 0;
 }

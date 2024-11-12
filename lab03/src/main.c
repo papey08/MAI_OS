@@ -87,6 +87,7 @@ int main(int argc, char *argw[]) {
             sem_unlink(SEM_EMPTY);
             sem_unlink(SEM_FULL);
             shm_unlink(MEM);
+            munmap(buf, MEM_SIZE);
             exit(-1);
         }
         while (1) {
@@ -97,6 +98,7 @@ int main(int argc, char *argw[]) {
             sem_post(empty);
         }
         waitpid(pid, 0, 0);
+        munmap(buf, MEM_SIZE);
     }
     sem_unlink(SEM_EMPTY);
     sem_unlink(SEM_FULL);
