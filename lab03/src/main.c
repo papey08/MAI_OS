@@ -29,11 +29,13 @@ int main(int argc, char *argw[]) {
     }
     int fd = open(fname, O_RDONLY);
     if (fd == -1) {
-        print(STDERR_FILENO, "ERROR: failed to open file: \"");
-        print(STDERR_FILENO, fname);
-        print(STDERR_FILENO, "\"\n");
-        print(STDERR_FILENO, strerror(errno));
-        print(STDERR_FILENO, "\n");
+        char out[1024] = {0};
+        strcat(out, "ERROR: failed to open file: \"");
+        strcat(out, fname);
+        strcat(out, "\"\n");
+        strcat(out, strerror(errno));
+        strcat(out, "\n");
+        print(STDERR_FILENO, out);
         exit(-1);
     }
     free(fname);
@@ -50,17 +52,21 @@ int main(int argc, char *argw[]) {
 
         char *argv[] = {prog_name, "", NULL};
         if (execv(prog_name, argv) == -1) {
-            print(STDERR_FILENO, "ERROR: failed to launch process \"");
-            print(STDERR_FILENO, prog_name);
-            print(STDERR_FILENO, "\"\n");
-            print(STDERR_FILENO, strerror(errno));
-            print(STDERR_FILENO, "\n");
+            char out[1024] = {0};
+            strcat(out, "ERROR: failed to launch process \"");
+            strcat(out, prog_name);
+            strcat(out, "\"\n");
+            strcat(out, strerror(errno));
+            strcat(out, "\n");
+            print(STDERR_FILENO, out);
             exit(-1);
         }
     } else if (pid == -1) {
-        print(STDERR_FILENO, "ERROR: failed to fork process\n");
-        print(STDERR_FILENO, strerror(errno));
-        print(STDERR_FILENO, "\n");
+        char out[1024] = {0};
+        strcat(out, "ERROR: failed to fork process\n");
+        strcat(out, strerror(errno));
+        strcat(out, "\n");
+        print(STDERR_FILENO, out);
         exit(-1);
     } else {
         char buffer[128];
