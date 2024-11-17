@@ -3,15 +3,16 @@
 #include <semaphore.h>
 #include <stdlib.h>
 
-sem_t thread_sem;
+sem_t thread_sem; //глобальный семафор
 #define DECK_SIZE 52
-pthread_mutex_t success_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t success_mutex = PTHREAD_MUTEX_INITIALIZER; //мьютекс для защиты общего ресурса
 
 typedef struct {
     int rounds;
     int successes;
 } ThreadData;
 
+//Алгоритм Фишера-Йетса
 void shuffle(int *deck) {
     for (int i = DECK_SIZE - 1; i > 0; i--) {
         int j = rand() & (i + 1);
@@ -37,6 +38,7 @@ void* monte_carlo(void* arg) {
        }
     }
 
+    //блокируем доступ к другим потокам
     if (pthread_mutex_lock(&success_mutex) != 0) {
         char msg[] = "Error lock mutex\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
@@ -44,13 +46,14 @@ void* monte_carlo(void* arg) {
     }
 
     data->successes += local_successes;
-
+    //освобождаем мьютекс
     if (pthread_mutex_unlock(&success_mutex) != 0) {
         char msg[] = "Error unlock mutex\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
         pthread_exit((void *)1);
     }
 
+    //увеличиваем счестчик семафора, освобождаем ресурс
     if (sem_post(&thread_sem) != 0) {
         char msg[] = "Error semaphore post\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
@@ -111,6 +114,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    //создаем семафор
     if (sem_init(&thread_sem, 0, max_threads) != 0) {
         char msg[] = "Error init semaphore\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
@@ -120,13 +124,16 @@ int main(int argc, char *argv[]) {
     pthread_t threads[max_threads];
     ThreadData data = {rounds / max_threads, 0};
 
+    //создаем потоки и запускаем Монте-Карло
     for (int i = 0; i < max_threads; i++) {
+        //запрашиваем разрешение у семафора
         if (sem_wait(&thread_sem) != 0) {
             char msg[] = "Error semaphore wait\n";
             write(STDERR_FILENO, msg, sizeof(msg) - 1);
             return 1;
         }
 
+        //запускаем новый поток
         if (pthread_create(&threads[i], NULL, monte_carlo, &data) != 0) {
             char msg[] = "Error thread creation\n";
             write(STDERR_FILENO, msg, sizeof(msg) - 1);
@@ -134,6 +141,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    //завершаем все потоки
     for (int i = 0; i < max_threads; i++) {
         if (pthread_join(threads[i], NULL) != 0) {
             char msg[] = "Error waiting thread\n";
@@ -147,6 +155,7 @@ int main(int argc, char *argv[]) {
     int len = probability_convert_str(buf, probability);
     write(STDOUT_FILENO, buf, len);
 
+    //освобождаем семафор
     if (sem_destroy(&thread_sem) != 0) {
         char msg[] = "Error destroy semaphore";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
