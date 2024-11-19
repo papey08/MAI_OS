@@ -11,9 +11,8 @@ static char CLIENT_PROGRAM_NAME[] = "client";
 
 int main(int argc, char **argv) {
 	if (argc == 1) {
-		char msg[1024];
-		uint32_t len = snprintf(msg, sizeof(msg) - 1, "usage: %s filename\n", argv[0]);
-		write(STDERR_FILENO, msg, len);
+		const char msg[] = "error: no filename provided\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
 		exit(EXIT_SUCCESS);
 	}
 
@@ -32,7 +31,6 @@ int main(int argc, char **argv) {
 		progpath[len] = '\0';
 	}
 
-	// Создаем разделяемую память
 	int shm_fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, 0666);
 	if (shm_fd == -1) {
 		const char msg[] = "error: failed to create shared memory\n";
@@ -40,7 +38,6 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	// Устанавливаем размер разделяемой памяти
 	ftruncate(shm_fd, 4096); // Размер 4096 байт
 
 	void *shared_memory = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
@@ -62,8 +59,7 @@ int main(int argc, char **argv) {
 	case 0: { 
 		pid_t pid = getpid(); 
 
-		// Используем разделяемую память для ввода
-		char msg[64];
+		const char msg[64];
 		const int32_t length = snprintf(msg, sizeof(msg), "%d: I'm a child\n", pid);
 		write(STDOUT_FILENO, msg, length);
 

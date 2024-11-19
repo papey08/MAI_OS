@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <ctype.h> // Для isupper()
 #include <sys/mman.h>
-#include <sys/stat.h> // Для shm_open
+#include <sys/stat.h>
 
 // Проверить, что строка начинается с заглавной буквы
 
