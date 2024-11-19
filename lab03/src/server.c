@@ -1,81 +1,110 @@
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <string.h>
 
-#define SHM_SIZE 4096  
-#define FILENAME_SIZE 4096 
+static char CLIENT_PROGRAM_NAME[] = "client";
 
-int intToStr(int num, char *str) {
-    int i = 0;
-    if (num < 0) {
-        str[i++] = '-';
-        num = -num;
-    }
-    int start = i;
-    do {
-        str[i++] = (num % 10) + '0';
-        num /= 10;
-    } while (num > 0);
-    
-    
-    for (int j = start, end = i - 1; j < end; j++, end--) {
-        char temp = str[j];
-        str[j] = str[end];
-        str[end] = temp;
-    }
-    str[i] = '\0';
-    return i;
-}
+int main(int argc, char **argv) {
+	if (argc == 1) {
+		char msg[1024];
+		uint32_t len = snprintf(msg, sizeof(msg) - 1, "usage: %s filename\n", argv[0]);
+		write(STDERR_FILENO, msg, len);
+		exit(EXIT_SUCCESS);
+	}
 
-int main() {
-    int shmid;
-    char *shared_memory;
+	char progpath[1024];
+	{
+		ssize_t len = readlink("/proc/self/exe", progpath, sizeof(progpath) - 1);
+		if (len == -1) {
+			const char msg[] = "error: failed to read full program path\n";
+			write(STDERR_FILENO, msg, sizeof(msg));
+			exit(EXIT_FAILURE);
+		}
 
-    shmid = shmget(IPC_PRIVATE, SHM_SIZE + FILENAME_SIZE, IPC_CREAT | 0666);
-    if (shmid < 0) {
-        const char msg[] = "ошибка: не удалось создать разделяемую память\n";
+		while (progpath[len] != '/')
+			--len;
+
+		progpath[len] = '\0';
+	}
+
+	// Создаем разделяемую память
+	int shm_fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, 0666);
+	if (shm_fd == -1) {
+		const char msg[] = "error: failed to create shared memory\n";
 		write(STDERR_FILENO, msg, sizeof(msg));
 		exit(EXIT_FAILURE);
-    }
+	}
 
-    shared_memory = (char *)shmat(shmid, NULL, 0);
-    if (shared_memory == (char *)(-1)) {
-        const char msg[] = "ошибка: не удалось привязать разделяемую память\n";
+	// Устанавливаем размер разделяемой памяти
+	ftruncate(shm_fd, 4096); // Размер 4096 байт
+
+	void *shared_memory = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+	if (shared_memory == MAP_FAILED) {
+		const char msg[] = "error: failed to map shared memory\n";
 		write(STDERR_FILENO, msg, sizeof(msg));
 		exit(EXIT_FAILURE);
-    }
+	}
 
-    const char msg[] = "Введите имя файла: ";
-	write(STDIN_FILENO, msg, sizeof(msg));    
-    read(STDIN_FILENO, shared_memory + SHM_SIZE, FILENAME_SIZE);
+	const pid_t child = fork();
 
-    shared_memory[SHM_SIZE + strcspn(shared_memory + SHM_SIZE, "\n")] = 0;
+	switch (child) {
+	case -1: { 
+		const char msg[] = "error: failed to spawn new process\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
+		exit(EXIT_FAILURE);
+	} break;
 
-    char msgForShmid[] = "Идентификатор разделяемой памяти: ";
-    msgForShmid[strlen(msgForShmid)] = intToStr(shmid, msgForShmid + strlen(msgForShmid));
-    int len = strlen(msgForShmid);
-	write(STDOUT_FILENO, msgForShmid, len);
-    write(STDOUT_FILENO, "\n", 1);
+	case 0: { 
+		pid_t pid = getpid(); 
 
-    while (1) {
-        const char msg[] = "Введите строку (или нажмите CTRL+D для завершения): ";
-        write(STDIN_FILENO, msg, sizeof(msg));
-        if (read(STDIN_FILENO, shared_memory, SHM_SIZE) <= 0) {
-            break; 
-        }        
-        shared_memory[strcspn(shared_memory, "\n")] = 0;
-   
-        if (strlen(shared_memory) == 0) {
-            break;
-        }
-    }
-    strcpy(shared_memory, "exit");
+		// Используем разделяемую память для ввода
+		char msg[64];
+		const int32_t length = snprintf(msg, sizeof(msg), "%d: I'm a child\n", pid);
+		write(STDOUT_FILENO, msg, length);
 
-    shmdt(shared_memory);
-    shmctl(shmid, IPC_RMID, NULL);
+		{
+			char path[1024];
+			snprintf(path, sizeof(path) - 1, "%s/%s", progpath, CLIENT_PROGRAM_NAME);
 
-    write(STDOUT_FILENO, "Сервер завершен.\n", strlen("Сервер завершен.\n"));
-    return 0;
+			char *const args[] = {CLIENT_PROGRAM_NAME, argv[1], NULL};
+
+			int32_t status = execv(path, args);
+
+			if (status == -1) {
+				const char msg[] = "error: failed to exec into new executable image\n";
+				write(STDERR_FILENO, msg, sizeof(msg));
+				exit(EXIT_FAILURE);
+			}
+		}
+	} break;
+
+	default: {
+		pid_t pid = getpid(); 
+
+		{
+			char msg[64];
+			const int32_t length = snprintf(msg, sizeof(msg), "%d: I'm a parent, my child has PID %d\n", pid, child);
+			write(STDOUT_FILENO, msg, length);
+		}
+
+		int child_status;
+		wait(&child_status);
+
+		if (child_status != EXIT_SUCCESS) {
+			const char msg[] = "error: child exited with error\n";
+			write(STDERR_FILENO, msg, sizeof(msg));
+			exit(child_status);
+		}
+	} break;
+	}
+
+	// Освобождаем ресурсы
+	munmap(shared_memory, 4096);
+	shm_unlink("/my_shared_memory");
+	close(shm_fd);
 }

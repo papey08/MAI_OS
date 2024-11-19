@@ -1,78 +1,98 @@
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <unistd.h>
-#include <fcntl.h> // Для open
-#include <sys/types.h> // Для ssize_t
-#include <sys/stat.h> // Для mode_t
+#include <stdint.h> 
+#include <stdbool.h> 
+#include <stdlib.h> 
+#include <unistd.h> 
+#include <fcntl.h>
+#include <ctype.h> // Для isupper()
+#include <sys/mman.h>
+#include <sys/stat.h> // Для shm_open
 
+// Проверить, что строка начинается с заглавной буквы
 
-#define SHM_SIZE 4096
-#define FILENAME_SIZE 4096
+int main(int argc, char **argv) {
+	char buf[4096];
+	ssize_t bytes;
 
-void write_to_stdout(const char *msg) {
-    write(STDOUT_FILENO, msg, strlen(msg));
-}
+	pid_t pid = getpid();
 
-void write_error(const char *msg) {
-    write(STDERR_FILENO, msg, strlen(msg));
-}
+	// Открываем разделяемую память
+	int shm_fd = shm_open("/my_shared_memory", O_RDONLY, 0666);
+	if (shm_fd == -1) {
+		const char msg[] = "error: failed to open shared memory\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
+		exit(EXIT_FAILURE);
+	}
 
-int main() {
-    int shmid;
-    char *shared_memory;
-    
-    write_to_stdout("Введите идентификатор разделяемой памяти: ");
-    char input[10];
-    read(STDIN_FILENO, input, sizeof(input));
-    shmid = atoi(input);
+	void *shared_memory = mmap(0, 4096, PROT_READ, MAP_SHARED, shm_fd, 0);
+	if (shared_memory == MAP_FAILED) {
+		const char msg[] = "error: failed to map shared memory\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
+		exit(EXIT_FAILURE);
+	}
 
-    shared_memory = (char *)shmat(shmid, NULL, 0);
-    if (shared_memory == (char *)(-1)) {
-        write_error("shmat: ошибка привязки разделяемой памяти\n");
-        exit(1);
-    }
+	int32_t file = open(argv[1], O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0600);
+	if (file == -1) {
+		const char msg[] = "error: failed to open requested file\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
+		exit(EXIT_FAILURE);
+	}
 
-    char *filename = shared_memory + SHM_SIZE;
+	{
+		char msg[128];
+		int32_t len = snprintf(msg, sizeof(msg) - 1, 
+        "%d: Start typing lines of text.Press 'Ctrl-D' or 'Enter' with no input to exit\n",
+        pid);
+		write(STDOUT_FILENO, msg, len);
+	}
 
-    int file = open(filename, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
-    if (file < 0) {
-        write_error("Ошибка при открытии файла\n");
-        exit(1);
-    }
+	while (bytes = read(STDIN_FILENO, buf, sizeof(buf))) {
+		if (bytes < 0) {
+			const char msg[] = "error: failed to read from stdin\n";
+			write(STDERR_FILENO, msg, sizeof(msg));
+			exit(EXIT_FAILURE);
+		} else if (buf[0] == '\n') {
+			break;
+		}
 
-    while (1) {
+		if (!isupper(buf[0])) {
+			const char msg[] = "error: string does not start with uppercase letter\n";
+			write(STDERR_FILENO, msg, sizeof(msg));
+			continue;
+		}
 
-        sleep(1); 
+		{
+			char msg[32];
+			int32_t len = snprintf(msg, sizeof(msg) - 1, "");
 
-        if (strlen(shared_memory) > 0) {
-            
-            if (strcmp(shared_memory, "exit") == 0) {
-                break; 
-            }
+			int32_t written = write(file, msg, len);
+			if (written != len) {
+				const char msg[] = "error: failed to write to file\n";
+				write(STDERR_FILENO, msg, sizeof(msg));
+				exit(EXIT_FAILURE);
+			}
+		}
 
-            if (isupper(shared_memory[0])) {
-                write_to_stdout("Ввод: ");
-                write_to_stdout(shared_memory);
-                write_to_stdout("\n");
+		{
+			buf[bytes - 1] = '\0';
 
-                write(file, shared_memory, strlen(shared_memory));
-                write(file, "\n", 1);
-                write_to_stdout("Записано в файл: ");
-                write_to_stdout(shared_memory);
-                write_to_stdout("\n");
-            } else {
-                write_error("Ошибка: строка должна начинаться с заглавной буквы\n");
-            }
+			int32_t written = write(file, buf, bytes);
+			if (written != bytes) {
+				const char msg[] = "error: failed to write to file\n";
+				write(STDERR_FILENO, msg, sizeof(msg));
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
 
-            memset(shared_memory, 0, SHM_SIZE);
-        }
-    }
+    if (bytes == 0) {
+		const char msg[] = "\nEnd of input detected (Ctrl+D)\n";
+		write(STDOUT_FILENO, msg, sizeof(msg));
+	}
 
-    close(file);
-    shmdt(shared_memory);
-    write_to_stdout("Клиент завершен.\n");
-    return 0;
+	const char term = '\0';
+	write(file, &term, sizeof(term));
+
+	close(file);
+	munmap(shared_memory, 4096);
+	close(shm_fd);
 }
