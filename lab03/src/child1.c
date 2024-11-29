@@ -1,10 +1,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <sys/shm.h>
-#include <sys/ipc.h>
+#include <sys/mman.h>
 #include <errno.h>
 #include <string.h>
+#include <semaphore.h>
+#include <fcntl.h>
 
 #define SHM_SIZE 1024
 
@@ -14,19 +15,36 @@ void handle_error(const char *msg) {
 }
 
 int main() {
-    key_t key = ftok("shared_memory", 65);
-    if (key == -1) handle_error("ftok");
+    // Open shared memory using shm_open
+    int fd = shm_open("/shared_memory", O_RDWR, 0666);
+    if (fd == -1) handle_error("shm_open");
 
-    int shmid = shmget(key, SHM_SIZE, 0666);
-    if (shmid == -1) handle_error("shmget");
+    // Map shared memory into process's address space
+    char *shared_memory = (char *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (shared_memory == MAP_FAILED) handle_error("mmap");
 
-    char *shared_memory = (char *)shmat(shmid, NULL, 0);
-    if (shared_memory == (char *)-1) handle_error("shmat");
+    // Open semaphores
+    sem_t *sem_parent = sem_open("/sem_parent", 0);
+    sem_t *sem_child1 = sem_open("/sem_child1", 0);
 
-    for (int i = 0; shared_memory[i] != '\0'; i++)
-        shared_memory[i] = tolower(shared_memory[i]);
+    if (sem_parent == SEM_FAILED || sem_child1 == SEM_FAILED)
+        handle_error("sem_open");
 
-    if (shmdt(shared_memory) == -1) handle_error("shmdt");
+    while (1) {
+        sem_wait(sem_child1);
+
+        if (strcmp(shared_memory, "") == 0) break;
+
+        for (int i = 0; shared_memory[i] != '\0'; i++) {
+            shared_memory[i] = tolower(shared_memory[i]);
+        }
+        sem_post(sem_parent);
+    }
+
+    if (sem_close(sem_parent) == -1) handle_error("sem_close sem_parent");
+    if (sem_close(sem_child1) == -1) handle_error("sem_close sem_child1");
+
+    if (munmap(shared_memory, SHM_SIZE) == -1) handle_error("munmap");
 
     return 0;
 }
