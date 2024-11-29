@@ -1,12 +1,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/shm.h>
-#include <sys/ipc.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
-#include <ctype.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <semaphore.h>
+
 
 #define SHM_SIZE 1024
 
@@ -28,18 +27,40 @@ void read_message(char *buffer, size_t size) {
 }
 
 int main() {
-    int fd = open("shared_memory", O_CREAT | O_RDWR, 0666);
+    // Create and open shared memory using shm_open
+    int fd = shm_open("/shared_memory", O_CREAT | O_RDWR, 0666);
     if (fd == -1) handle_error("Ошибка создания файла");
-    close(fd);
 
-    key_t key = ftok("shared_memory", 65);
-    if (key == -1) handle_error("ftok");
+    // Set the size of the shared memory object
+    if (ftruncate(fd, SHM_SIZE) == -1) handle_error("ftruncate");
 
-    int shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
-    if (shmid == -1) handle_error("shmget");
+    // Map shared memory into process's address space
+    char *shared_memory = (char *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (shared_memory == MAP_FAILED) handle_error("mmap");
 
-    char *shared_memory = (char *)shmat(shmid, NULL, 0);
-    if (shared_memory == (char *)-1) handle_error("shmat");
+    // Create semaphores
+    sem_t *sem_parent = sem_open("/sem_parent", O_CREAT, 0666, 0);
+    sem_t *sem_child1 = sem_open("/sem_child1", O_CREAT, 0666, 0);
+    sem_t *sem_child2 = sem_open("/sem_child2", O_CREAT, 0666, 0);
+
+    if (sem_parent == SEM_FAILED || sem_child1 == SEM_FAILED || sem_child2 == SEM_FAILED)
+        handle_error("sem_open");
+
+    pid_t pid1 = fork();
+    if (pid1 == -1) handle_error("fork");
+
+    if (pid1 == 0) {
+        execl("./child1", "./child1", NULL);
+        handle_error("execl (child1)");
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == -1) handle_error("fork");
+
+    if (pid2 == 0) {
+        execl("./child2", "./child2", NULL);
+        handle_error("execl (child2)");
+    }
 
     write_message("Введите строку (или пустую строку для выхода): ");
     char input_buffer[SHM_SIZE];
@@ -47,37 +68,41 @@ int main() {
     while (1) {
         read_message(input_buffer, SHM_SIZE);
 
-        if (strcmp(input_buffer, "") == 0) break;
+        if (strcmp(input_buffer, "") == 0) {
+            break;
+        }
 
         strcpy(shared_memory, input_buffer);
 
-        pid_t pid1 = fork();
-        if (pid1 == -1) handle_error("fork");
+        sem_post(sem_child1);
+        sem_wait(sem_parent);
 
-        if (pid1 == 0) {
-            execl("./child1", "./child1", NULL);
-            handle_error("execl (child1)");
-        }
-
-        wait(NULL);
-
-        pid_t pid2 = fork();
-        if (pid2 == -1) handle_error("fork");
-
-        if (pid2 == 0) {
-            execl("./child2", "./child2", NULL);
-            handle_error("execl (child2)");
-        }
-
-        wait(NULL);
+        sem_post(sem_child2);
+        sem_wait(sem_parent);
 
         write_message("Результат обработки: ");
         write_message(shared_memory);
         write_message("\nВведите строку (или пустую строку для выхода): ");
     }
 
-    if (shmdt(shared_memory) == -1) handle_error("shmdt");
-    if (shmctl(shmid, IPC_RMID, NULL) == -1) handle_error("shmctl");
+    strcpy(shared_memory, "");
+    sem_post(sem_child1);
+    sem_post(sem_child2);
+
+    wait(NULL);
+    wait(NULL);
+
+    // Cleanup
+    if (munmap(shared_memory, SHM_SIZE) == -1) handle_error("munmap");
+    if (shm_unlink("/shared_memory") == -1) handle_error("shm_unlink");
+
+    if (sem_close(sem_parent) == -1) handle_error("sem_close sem_parent");
+    if (sem_close(sem_child1) == -1) handle_error("sem_close sem_child1");
+    if (sem_close(sem_child2) == -1) handle_error("sem_close sem_child2");
+
+    if (sem_unlink("/sem_parent") == -1) handle_error("sem_unlink sem_parent");
+    if (sem_unlink("/sem_child1") == -1) handle_error("sem_unlink sem_child1");
+    if (sem_unlink("/sem_child2") == -1) handle_error("sem_unlink sem_child2");
 
     return 0;
 }
