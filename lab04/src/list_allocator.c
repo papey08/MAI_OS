@@ -19,11 +19,11 @@ Allocator *allocator_create(void *const memory, const size_t size) {
     if (memory == NULL || size < sizeof(Allocator))
         return NULL;
     Allocator *all = (Allocator *)memory;
-    all->size = BLOCK_COUNT * 4; // 128 4 byte blocks
+    all->size = BLOCK_COUNT; // 128 4 byte blocks
     if (all->size % 2 == 1)
         all->size++;
 
-    all->memory = mmap(NULL, all->size, PROT_READ | PROT_WRITE,
+    all->memory = mmap(NULL, all->size * sizeof(uint32_t), PROT_READ | PROT_WRITE,
                        MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (all->memory == MAP_FAILED)
         return NULL;
@@ -33,7 +33,7 @@ Allocator *allocator_create(void *const memory, const size_t size) {
 }
 
 void allocator_destroy(Allocator *const allocator) {
-    munmap(allocator->memory, allocator->size);
+    munmap(allocator->memory, allocator->size * sizeof(uint32_t));
 }
 
 void *allocator_alloc(Allocator *const allocator, const size_t size) {
