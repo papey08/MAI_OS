@@ -1,15 +1,17 @@
 CC = clang
 CFLAGS = -std=gnu18 -pedantic -Wall -Wextra -g
-TARGET = main.out
+TARGET = main.out link.so
 
 .PHONY: clean run build
 
-build: main.out
+build: ${TARGET}
 
-main.out: main.c list.c
-	${CC} ${CFLAGS} -o $@ main.c
+main.out: main.c
+	${CC} ${CFLAGS} -o $@ $<
+
+link.so: list_allocator.c
+	${CC} ${CFLAGS} -shared -o $@ $<
 
 clean:
-	@rm -f ./*.o
-	@rm -f ./*.out
-	@rm -rf ./*.out.*
+	@rm -f ${TARGET}
+	@rm -rf ./*.dSYM

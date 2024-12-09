@@ -3,14 +3,17 @@
 #include <sys/mman.h>
 #include <stdlib.h>
 
+#include "allocator.h"
+
 #ifndef BLOCK_COUNT
 #define BLOCK_COUNT 128
 #endif
 
-typedef struct Allocator {
-    uint32_t *memory;
+struct Allocator {
     size_t size;
-} Allocator;
+    uint32_t *memory;
+};
+
 
 Allocator *allocator_create(void *const memory, const size_t size) {
     if (memory == NULL || size < sizeof(Allocator))
