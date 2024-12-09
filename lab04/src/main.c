@@ -50,18 +50,6 @@ void allocator_free_impl(Allocator *const allocator, void *const memory) {
     munmap(mem, *mem);
 }
 
-void display_allocation(Allocator *all) {
-    if (all == NULL) {
-        printf("library not loaded\n");
-        return;
-    }
-    printf("[");
-    for (size_t i = 0; i < all->size; i++) {
-        printf("%u ", all->memory[i]);
-    }
-    printf("]\n\n");
-}
-
 #define LOAD_FUNCTION(name)                                                    \
     {                                                                          \
         name = (name##_func *)dlsym(library, #name);                           \
@@ -95,14 +83,14 @@ int main(int argc, char *argv[]) {
     char mem[1024];
     Allocator *all = allocator_create(mem, sizeof(mem));
     int *a = allocator_alloc(all, 12 * sizeof(int));
+    int *b = allocator_alloc(all, 12 * sizeof(int));
     for (int i = 0; i < 12; i++) {
         a[i] = i;
+        b[12 - i - 1] = i;
     }
     for (int i = 0; i < 12; i++) {
-        printf("a[%d] = %d\n", i, a[i]);
+        printf("a[%d] = %d; b[%d] = %d\n", i, a[i], i, b[i]);
     }
-    display_allocation(all);
     allocator_free(all, a);
-    display_allocation(all);
     allocator_destroy(all);
 }
