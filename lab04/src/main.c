@@ -92,5 +92,10 @@ int main(int argc, char *argv[]) {
         printf("a[%d] = %d; b[%d] = %d\n", i, a[i], i, b[i]);
     }
     allocator_free(all, a);
+    allocator_free(all, b);
+    int *c = allocator_alloc(all, 4 * sizeof(int));
+    for (int i = 0; i < 4; i++) {
+        printf("c[%d] = %d\n", i, c[i]);
+    }
     allocator_destroy(all);
 }

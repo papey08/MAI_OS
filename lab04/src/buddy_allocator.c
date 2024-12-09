@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 
@@ -13,7 +12,7 @@
 typedef struct Block Block;
 struct Block {
     bool taken;
-    bool right;
+    uint32_t path;
     uint8_t size_class;
     Block *next;
     Block *prev;
@@ -30,9 +29,12 @@ struct Allocator {
 };
 
 Block *buddy(Block *p) {
-    if (p->right)
-        return p - (1 << p->size_class);
-    return p + (1 << p->size_class);
+    uint32_t *ptr = (uint32_t *)p;
+    if (p->path & (1 << p->size_class))
+        ptr -= (1 << p->size_class);
+    else
+        ptr += (1 << p->size_class);
+    return (Block *)ptr;
 }
 
 Allocator *allocator_create(void *const memory, const size_t size) {
@@ -50,7 +52,7 @@ Allocator *allocator_create(void *const memory, const size_t size) {
     all->free->size_class = MAX_SIZE_CLASS;
     all->free->next = NULL;
     all->free->prev = NULL;
-    all->free->right = 0;
+    all->free->path = 0;
     return all;
 }
 
@@ -67,6 +69,7 @@ void *allocator_alloc(Allocator *const all, const size_t size) {
         return NULL;
     Block *p = all->free;
     for (Block *c = all->free; c; c = c->next) {
+
         if (c->taken || (uint8_t)c->size_class < size_class)
             continue;
         if (p->taken) {
@@ -88,11 +91,12 @@ void *allocator_alloc(Allocator *const all, const size_t size) {
         other->next = all->free;
         other->prev = NULL;
         other->taken = false;
-        other->right = true;
+        other->path = p->path | 1 << p->size_class;
         if (all->free)
             all->free->prev = other;
         all->free = other;
     }
+    p->taken = true;
     return (char *)p + sizeof(Block);
 }
 
@@ -108,9 +112,11 @@ void allocator_free(Allocator *const allocator, void *const memory) {
             bud->prev->next = bud->next;
         if (bud->next)
             bud->next->prev = bud->prev;
+        if (allocator->free == bud)
+            allocator->free = bud->next;
         // if buddy is free we can remove him from the free list and combine
         // with current
-        p = p->right ? bud : p;
+        p = p->path & (1 << p->size_class) ? bud : p;
         p->size_class++;
     }
     p->taken = false;
