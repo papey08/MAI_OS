@@ -61,9 +61,9 @@ void allocator_free_impl(Allocator *const allocator, void *const memory) {
         }                                                                      \
     }
 
-void load_dynamic(int argc, char *argv[]) {
-    void *library = dlopen(argv[1], RTLD_LOCAL | RTLD_NOW);
-    if (argc > 1 && library) {
+void load_dynamic(const char *path) {
+    void *library = dlopen(path, RTLD_LOCAL | RTLD_NOW);
+    if (path && library) {
         LOAD_FUNCTION(allocator_create);
         LOAD_FUNCTION(allocator_destroy);
         LOAD_FUNCTION(allocator_alloc);
@@ -79,7 +79,8 @@ void load_dynamic(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-    load_dynamic(argc, argv);
+    (void)argc;
+    load_dynamic(argv[1]);
     char mem[1024];
     Allocator *all = allocator_create(mem, sizeof(mem));
     int *a = allocator_alloc(all, 12 * sizeof(int));
