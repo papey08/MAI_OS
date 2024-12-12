@@ -79,10 +79,15 @@ void *allocator_alloc(Allocator *const all, const size_t size) {
         if (c->size_class < p->size_class)
             p = c;
     }
-    if (p->taken)
+    if (p == NULL || p->taken)
         return NULL;
 
-    all->free = all->free->next;
+    if (all->free == p)
+        all->free = p->next;
+    if (p->next)
+        p->next->prev = p->prev;
+    if (p->prev)
+        p->prev->next = p->next;
 
     while (p->size_class > size_class) {
         p->size_class = p->size_class - 1;

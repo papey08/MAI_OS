@@ -14,7 +14,6 @@ struct Allocator {
     uint32_t *memory;
 };
 
-
 Allocator *allocator_create(void *const memory, const size_t size) {
     if (memory == NULL || size < sizeof(Allocator))
         return NULL;
@@ -23,8 +22,9 @@ Allocator *allocator_create(void *const memory, const size_t size) {
     if (all->size % 2 == 1)
         all->size++;
 
-    all->memory = mmap(NULL, all->size * sizeof(uint32_t), PROT_READ | PROT_WRITE,
-                       MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    all->memory =
+        mmap(NULL, all->size * sizeof(uint32_t), PROT_READ | PROT_WRITE,
+             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (all->memory == MAP_FAILED)
         return NULL;
     *all->memory = all->size;
@@ -65,8 +65,10 @@ void *allocator_alloc(Allocator *const allocator, const size_t size) {
     *ptr = newsize | 1;          // front header
     *(ptr + newsize - 1) = *ptr; // back header
 
-    if (newsize < oldsize)
+    if (newsize < oldsize) {
         *(ptr + newsize) = oldsize - newsize;
+        *(ptr + oldsize - 1) = oldsize - newsize;
+    }
     return ptr + 1;
 }
 
