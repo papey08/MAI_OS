@@ -3,7 +3,6 @@
 #include <dlfcn.h>
 #include <unistd.h>
 
-#include <stdio.h>
 #include <string.h>
 
 #include <sys/mman.h>
@@ -78,6 +77,31 @@ void load_dynamic(const char *path) {
     }
 }
 
+int itoa(int n, char *res, int d) {
+    int neg = 0;
+    if (n < 0) {
+        neg++;
+        n *= -1;
+        res[0] = '-';
+        res++;
+    }
+    int i = 0;
+    while (n > 0) {
+        res[i++] = '0' + (n % 10);
+        n /= 10;
+    }
+    while (i < d) {
+        res[i++] = '0';
+    }
+    for (int j = 0; j < i / 2; j++) {
+        char tmp = res[j];
+        res[j] = res[i - j - 1];
+        res[i - j - 1] = tmp;
+    }
+    res[i] = 0;
+    return i + neg;
+}
+
 int main(int argc, char *argv[]) {
     (void)argc;
     load_dynamic(argv[1]);
@@ -85,18 +109,42 @@ int main(int argc, char *argv[]) {
     Allocator *all = allocator_create(mem, sizeof(mem));
     int *a = allocator_alloc(all, 12 * sizeof(int));
     int *b = allocator_alloc(all, 12 * sizeof(int));
+    char buffer[1024];
+    char int_buffer[20];
+    char int_buffer2[20];
     for (int i = 0; i < 12; i++) {
         a[i] = i;
         b[12 - i - 1] = i;
     }
     for (int i = 0; i < 12; i++) {
-        printf("a[%d] = %d; b[%d] = %d\n", i, a[i], i, b[i]);
+        itoa(i, int_buffer, 1);
+        itoa(a[i], int_buffer2, 1);
+        buffer[0] = 0;
+        strcat(buffer, "a[");
+        strcat(buffer, int_buffer);
+        strcat(buffer, "] = ");
+        strcat(buffer, int_buffer2);
+        strcat(buffer, "; b[");
+        strcat(buffer, int_buffer);
+        strcat(buffer, "] = ");
+        itoa(b[i], int_buffer2, 1);
+        strcat(buffer, int_buffer2);
+        strcat(buffer, "\n");
+        write(STDOUT_FILENO, buffer, strlen(buffer));
     }
     allocator_free(all, a);
     allocator_free(all, b);
     int *c = allocator_alloc(all, 4 * sizeof(int));
     for (int i = 0; i < 4; i++) {
-        printf("c[%d] = %d\n", i, c[i]);
+        itoa(i, int_buffer, 1);
+        itoa(c[i], int_buffer2, 1);
+        buffer[0] = 0;
+        strcat(buffer, "c[");
+        strcat(buffer, int_buffer);
+        strcat(buffer, "] = ");
+        strcat(buffer, int_buffer2);
+        strcat(buffer, "\n");
+        write(STDOUT_FILENO, buffer, strlen(buffer));
     }
     allocator_destroy(all);
 }

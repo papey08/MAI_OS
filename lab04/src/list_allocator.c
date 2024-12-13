@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <stdlib.h>
@@ -81,7 +80,6 @@ void allocator_free(Allocator *const allocator, void *const memory) {
     uint32_t *front = ptr;
     uint32_t *back = ptr + *ptr - 1;
     size_t size = *ptr;
-    printf("size = %zu\n", size);
 
     uint32_t *next = ptr + *ptr;
     if ((*next & 1) == 0) {
