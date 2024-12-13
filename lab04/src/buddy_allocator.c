@@ -57,7 +57,7 @@ Allocator *allocator_create(void *const memory, const size_t size) {
 }
 
 void allocator_destroy(Allocator *const allocator) {
-    munmap(allocator->free, allocator->size * sizeof(uint32_t));
+    munmap(allocator->mem, allocator->size * sizeof(uint32_t));
 }
 
 void *allocator_alloc(Allocator *const all, const size_t size) {
