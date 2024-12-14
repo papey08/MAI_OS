@@ -31,16 +31,16 @@ int main(int argc, char **argv) {
 		progpath[len] = '\0';
 	}
 
-	int shm_fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, 0666);
+	int shm_fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, 0666); //O_RDWR - open for read and write
 	if (shm_fd == -1) {
 		const char msg[] = "error: failed to create shared memory\n";
 		write(STDERR_FILENO, msg, sizeof(msg));
 		exit(EXIT_FAILURE);
 	}
 
-	ftruncate(shm_fd, 4096); // Размер 4096 байт
+	ftruncate(shm_fd, 4096); // size 4096 byte
 
-	void *shared_memory = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+	void *shared_memory = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0); // 0 - OC choose address
 	if (shared_memory == MAP_FAILED) {
 		const char msg[] = "error: failed to map shared memory\n";
 		write(STDERR_FILENO, msg, sizeof(msg));
